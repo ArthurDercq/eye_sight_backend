@@ -1,0 +1,13 @@
+fastapi
+requests
+psycopg2
+dotenv
+pandas
+sqlalchemy
+matplotlib
+calmap
+polyline
+folium
+contextily
+geopandas
+shapely
