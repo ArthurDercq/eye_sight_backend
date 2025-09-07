@@ -34,11 +34,3 @@ def get_conn():
         yield conn
     finally:
         conn.close()
-
-
-def get_engine():
-    """
-    Retourne un moteur SQLAlchemy pour pandas.read_sql ou df.to_sql.
-    """
-    uri = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
-    return create_engine(uri)

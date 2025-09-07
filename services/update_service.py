@@ -4,8 +4,7 @@ from strava.clean_data import clean_data
 from strava.store_data import store_df_in_postgresql, store_df_streams_in_postgresql
 from strava.params import *
 from sqlalchemy import create_engine, text
-
-from services.db_service import get_engine  # si tu veux utiliser le moteur SQLAlchemy du backend
+from services.db_service import get_engine
 
 
 def get_last_activity_date():

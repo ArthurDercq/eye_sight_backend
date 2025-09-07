@@ -1,9 +1,9 @@
 import math
 import matplotlib.pyplot as plt
-from eye_sight.strava.store_data import *
-from eye_sight.strava.clean_data import *
-from eye_sight.strava.fetch_strava import *
-from eye_sight.params import *
+from strava.store_data import *
+from strava.clean_data import *
+from strava.fetch_strava import *
+from strava.params import *
 
 
 

@@ -1,17 +1,31 @@
 
 import pandas as pd
-import sqlite3
 from psycopg2 import connect, sql
 from psycopg2.extras import execute_values
 import pandas as pd
 import json
-from datetime import datetime
 from strava.clean_data import *
 from strava.fetch_strava import *
 from strava.params import *
 from datetime import datetime
+from db.connection import get_conn
 
 
+def get_all_activities():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM activites ORDER BY start_date DESC;")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return pd.DataFrame(rows)
+
+def get_engine():
+    """
+    Retourne un moteur SQLAlchemy pour pandas.read_sql ou df.to_sql.
+    """
+    uri = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
+    return create_engine(DB_URI)
 
 def normalize_sport_type(sport):
     mapping = {

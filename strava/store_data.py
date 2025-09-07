@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from strava.clean_data import *
 from strava.fetch_strava import *
-from params import *
+from strava.params import *
 from datetime import datetime
 
 
