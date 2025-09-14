@@ -1,5 +1,6 @@
 from db.connection import get_conn
 import pandas as pd
+from services.activity_service import get_all_activities
 
 def test_get_all_activities():
     try:
@@ -10,8 +11,8 @@ def test_get_all_activities():
                 print(f"{len(rows)} activités récupérées")
 
                 # Affiche les 5 premières lignes pour vérifier
-                for row in rows[:5]:
-                    print(row)
+                #for row in rows[:5]:
+                #    print(row)
 
                 # Convertir en DataFrame pour voir la structure
                 df = pd.DataFrame(rows)
@@ -21,4 +22,9 @@ def test_get_all_activities():
         print("Erreur lors de la récupération des activités :", e)
 
 if __name__ == "__main__":
-    test_get_all_activities()
+    #test_get_all_activities()
+
+    df = get_all_activities()
+    print(df.head())
+    print(df.isna().sum())
+    print(df.dtypes)

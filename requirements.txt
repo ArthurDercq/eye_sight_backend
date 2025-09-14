@@ -14,3 +14,5 @@ geopandas
 shapely
 json
 polyline
+numpy
+datetime

@@ -116,15 +116,24 @@ def get_calendar_heatmap_data(df, value_col="distance"):
 def get_repartition_run_data(df_filtered, sport_type):
     """
     Prépare les données pour un barplot horizontal du nombre d'activités
-    par catégorie de distance pour un sport donné, à envoyer au front.
+    par catégorie de distance pour un ou plusieurs sports donnés, à envoyer au front.
+
+    :param df_filtered: DataFrame filtré par date
+    :param sport_type: str ou liste de str des sports à inclure
     """
-    df_sport = df_filtered[df_filtered["sport_type"] == sport_type].copy()
+    # S'assurer que sport_type est une liste
+    if isinstance(sport_type, str):
+        sport_type = [sport_type]
+
+    # Filtrer par sport_type
+    df_sport = df_filtered[df_filtered["sport_type"].isin(sport_type)].copy()
 
     if df_sport.empty:
         return {
             "labels": [],
             "values": [],
-            "message": "Aucune activité"
+            "message": "Aucune activité",
+            "sport_type": sport_type
         }
 
     # Définir les catégories de distance

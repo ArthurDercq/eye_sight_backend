@@ -2,17 +2,35 @@ import pandas as pd
 import json
 import polyline
 from db.connection import get_conn
-
+import numpy as np
+import datetime
 
 def get_all_activities():
-    """Récupère toutes les activités dans un DataFrame."""
+    """Récupère toutes les activités dans un DataFrame et rend les données JSON-compliant."""
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM activites ORDER BY start_date DESC;")
             rows = cur.fetchall()
             colnames = [desc[0] for desc in cur.description]
 
-    return pd.DataFrame(rows, columns=colnames)
+    df = pd.DataFrame(rows, columns=colnames)
+
+    # Remplacer tous les NaN par None
+    df = df.where(pd.notnull(df), None)
+    # Remplacer tous les NaN, inf, -inf par None
+    df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+
+    # Convertir les datetime en string ISO
+    for col in ["start_date", "start_date_local"]:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: x.isoformat() if x is not None else None)
+
+    # Convertir float64 et int64 numpy en types Python natifs
+    for col in df.select_dtypes(include=["float64", "int64"]).columns:
+        df[col] = df[col].apply(lambda x: None if x is None else float(x) if isinstance(x, (float, np.floating)) else int(x) if isinstance(x, (int, np.integer)) else x)
+
+    # Les colonnes bool et object sont déjà JSON-safe
+    return df
 
 def get_last_activity(sport_type=None):
     df = get_all_activities()
@@ -26,7 +44,7 @@ def get_last_activity(sport_type=None):
         return None
 
     #dernier_serie = df.sort_values(by="start_date", ascending=False).iloc[0]
-    dernier = df.sort_values(by="start_date", ascending=False).iloc[0] #c'est une serie car une seule paire de corchets
+    dernier = df.sort_values(by="start_date", ascending=False).iloc[0] #c'est une serie car une seule paire de crochets
 
     # Extraire la polyline
     map_json = json.loads(dernier.get("map", "{}"))
@@ -45,76 +63,70 @@ def get_last_activity(sport_type=None):
     "polyline_coords": coords
 }
 
-def filter_activities(df: pd.DataFrame, sport_type: str = None, date_start: str = None) -> pd.DataFrame:
-    """Applique les filtres usuels (sport + dates)."""
-    if sport_type:
-        df = df[df["sport_type"] == sport_type]
-
-    if date_start:
-        df = df[df["start_date"] >= pd.to_datetime(date_start)]
-
-    return df
-
-
-
-def _aggregate_data(df, value_col, freq, periods, sport_types=None):
+def get_recent_activities(weeks: int = 12, sport_types=None):
     """
-    Agrège les données par période (jour, semaine, mois).
-
-    :param df: DataFrame avec au minimum 'start_date'
-    :param value_col: colonne principale à agréger (ex: 'moving_time', 'distance')
-    :param freq: fréquence pandas ('D' = jour, 'W-MON' = semaine commençant lundi, 'M' = mois)
-    :param periods: nombre de périodes à afficher
-    :param sport_types: liste des sports à filtrer (optionnel)
+    Récupère les activités des dernières `weeks` depuis la BDD.
     """
-    df = df.copy()
-    df["start_date"] = pd.to_datetime(df["start_date"])
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            query = """
+                SELECT *
+                FROM activites
+                WHERE start_date >= %s
+                ORDER BY start_date DESC;
+            """
+            start_date = (datetime.datetime.now() - pd.Timedelta(weeks=weeks*7, unit="D")).isoformat()
+            cur.execute(query, (start_date,))
+            rows = cur.fetchall()
+            colnames = [desc[0] for desc in cur.description]
 
+    df = pd.DataFrame(rows, columns=colnames)
+
+    # Nettoyer les NaN / inf pour JSON
+    df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+
+    # Convertir datetime en string ISO
+    for col in ["start_date", "start_date_local"]:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: x.isoformat() if x else None)
+
+    # Filtrer par sport si demandé
     if sport_types:
         df = df[df["sport_type"].isin(sport_types)]
 
-    # colonnes disponibles dynamiquement
-    agg_dict = {}
-    if value_col in df.columns:
-        agg_dict[value_col] = "sum"
+    return df
+
+def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
+    """
+    Agrège les données par semaine en additionnant la colonne `value_col`.
+    """
+    if df.empty:
+        return pd.DataFrame(columns=["period", value_col])
+
+    df = df.copy()
+    df["start_date"] = pd.to_datetime(df["start_date"])
+
+    # garder seulement les colonnes numériques utiles
+    numeric_cols = [value_col]
+    if "distance" in df.columns:
+        numeric_cols.append("distance")
     if "total_elevation_gain" in df.columns:
-        agg_dict["total_elevation_gain"] = "sum"
-    if "distance" in df.columns and value_col != "distance":
-        agg_dict["distance"] = "sum"
+        numeric_cols.append("total_elevation_gain")
+    if "average_speed" in df.columns:
+        numeric_cols.append("average_speed")
 
-    # Grouper par période
-    df["period"] = df["start_date"].dt.to_period(freq).apply(lambda r: r.start_time)
-    aggregated = df.groupby("period").agg(agg_dict).reset_index()
+    df_numeric = df[["start_date"] + numeric_cols]
 
-    # Créer toutes les périodes complètes
-    all_periods = pd.date_range(
-        start=df["period"].min(),
-        end=df["period"].max(),
-        freq=freq
-    )
-    aggregated = (
-        aggregated.set_index("period")
-        .reindex(all_periods, fill_value=0)
-        .reset_index()
-        .rename(columns={"index": "period"})
-    )
+    # Grouper par semaine
+    weekly = df_numeric.groupby(pd.Grouper(key="start_date", freq="W-MON", label="left"))[numeric_cols].sum().reset_index()
 
-    # Limiter au nombre demandé
-    aggregated = aggregated.sort_values("period", ascending=False).head(periods).sort_values("period")
+    # Renommer start_date -> period pour plus de clarté
+    weekly = weekly.rename(columns={"start_date": "period"})
 
-    return aggregated
+    # Rendre JSON-safe
+    weekly = weekly.replace({np.nan: None})
 
-
-def prepare_weekly_data(df, value_col="moving_time", weeks=12, sport_types=None):
-    return _aggregate_data(df, value_col, freq="W-MON", periods=weeks, sport_types=sport_types)
-
-
-def prepare_monthly_data(df, value_col="moving_time", months=12, sport_types=None):
-    return _aggregate_data(df, value_col, freq="M", periods=months, sport_types=sport_types)
-
-
-def prepare_daily_data(df, value_col="moving_time", days=30, sport_types=None):
-    return _aggregate_data(df, value_col, freq="D", periods=days, sport_types=sport_types)
+    return weekly
 
 
 def minutes_to_hms(minutes):
@@ -132,107 +144,3 @@ SPORT_MAPPING = {
     "Ride": "Bike",
     "Swim": "Swim"
 }
-
-def aggregate_distance(df=None, period="W", sport_filter=None):
-    """
-    Agrège les distances parcourues selon la période et le type de sport.
-
-    :param df: DataFrame avec toutes les activités (si None, sera récupéré depuis DB)
-    :param period: "D"=jour, "W"=semaine, "M"=mois, "Y"=année
-    :param sport_filter: liste de sports à inclure (ex: ["Run","Trail"]) ou None pour tous
-    :return: DataFrame avec colonnes ['period', 'Run', 'Trail', 'Run&Trail', 'Bike', 'Swim']
-    """
-    if df is None:
-        df = get_all_activities()
-    if df.empty:
-        return pd.DataFrame(columns=['period', 'Run', 'Trail', 'Run&Trail', 'Bike', 'Swim'])
-
-    df = df.copy()
-    df["start_date"] = pd.to_datetime(df["start_date"])
-    df["sport_type"] = df["sport_type"].map(lambda s: SPORT_MAPPING.get(s, s))
-
-    # Ajouter colonne période
-    df["period"] = df["start_date"].dt.to_period(period).apply(lambda r: r.start_time)
-
-    # Filtrer sports si nécessaire
-    if sport_filter:
-        df = df[df["sport_type"].isin(sport_filter)]
-
-    # Agrégation
-    agg = (
-        df.groupby(["period","sport_type"])["distance"]
-        .sum()
-        .reset_index()
-        .pivot(index="period", columns="sport_type", values="distance")
-        .fillna(0)
-    )
-
-    # Ajouter colonnes combinées
-    agg["Run&Trail"] = agg.get("Run", 0) + agg.get("Trail", 0)
-
-    # S'assurer que toutes les colonnes sont présentes
-    for col in ["Run","Trail","Run&Trail","Bike","Swim"]:
-        if col not in agg.columns:
-            agg[col] = 0
-
-    # Tri chronologique
-    agg = agg.reset_index().sort_values("period")
-
-    return agg
-
-
-def prepare_weekly_avg_speed_by_sport(df, weeks=12, sport_types=None):
-    """
-    Calcule la vitesse moyenne par semaine selon le type de sport.
-
-    :param df: DataFrame avec colonnes 'start_date', 'distance' (km), 'moving_time' (minutes), 'sport_type'
-    :param weeks: nombre de semaines à afficher
-    :param sport_types: liste de sports à inclure
-    :return: DataFrame avec colonnes ['period', sport1, sport2, ...] et vitesses adaptées
-    """
-    df = df.copy()
-    df["start_date"] = pd.to_datetime(df["start_date"])
-
-    if sport_types:
-        df = df[df["sport_type"].isin(sport_types)]
-
-    # Créer la période hebdomadaire
-    df["period"] = df["start_date"].dt.to_period("W-MON").apply(lambda r: r.start_time)
-
-    # Fonction pour calculer la vitesse selon le sport
-    def compute_speed(sub):
-        sport = sub["sport_type"].iloc[0]
-        if sport in ["Run","Trail"]:
-            # minutes/km
-            return (sub["moving_time"].sum() / sub["distance"].sum()) if sub["distance"].sum() > 0 else 0
-        elif sport == "Bike":
-            # km/h
-            return (sub["distance"].sum() / (sub["moving_time"].sum() / 60)) if sub["moving_time"].sum() > 0 else 0
-        elif sport == "Swim":
-            # minutes/100 m
-            return (sub["moving_time"].sum() / (sub["distance"].sum() * 10)) if sub["distance"].sum() > 0 else 0
-        else:
-            return 0
-
-    # Grouper par période et sport_type
-    weekly = df.groupby(["period","sport_type"]).apply(compute_speed).reset_index(name="avg_speed")
-
-    # Pivot pour avoir colonnes par sport
-    weekly_pivot = weekly.pivot(index="period", columns="sport_type", values="avg_speed").fillna(0)
-
-    # Assurer toutes les colonnes existantes
-    for col in ["Run","Trail","Bike","Swim"]:
-        if col not in weekly_pivot.columns:
-            weekly_pivot[col] = 0
-
-    # Ajouter Run&Trail
-    weekly_pivot["Run&Trail"] = weekly_pivot["Run"] + weekly_pivot["Trail"]
-
-    # Reindex toutes les semaines même vides
-    all_weeks = pd.date_range(start=df["period"].min(), end=df["period"].max(), freq="W-MON")
-    weekly_pivot = weekly_pivot.reindex(all_weeks, fill_value=0).reset_index().rename(columns={"index": "period"})
-
-    # Limiter au nombre de semaines demandé
-    weekly_pivot = weekly_pivot.sort_values("period", ascending=False).head(weeks).sort_values("period")
-
-    return weekly_pivot

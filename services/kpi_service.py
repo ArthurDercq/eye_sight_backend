@@ -49,7 +49,7 @@ def prepare_kpis(start_date=None, end_date=None):
 
     total_dplus_run = df[df["sport_type"] == "Run"]["total_elevation_gain"].sum()
     total_dplus_trail = df[df["sport_type"] == "Trail"]["total_elevation_gain"].sum()
-    total_dplus_run_trail = total_km_run + total_km_trail
+    total_dplus_run_trail = total_dplus_run + total_dplus_trail
     total_dplus_bike = df[df["sport_type"] == "Bike"]["total_elevation_gain"].sum()
 
     # Total heures de sport (elapsed_time en secondes → heures)

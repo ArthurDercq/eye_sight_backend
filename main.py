@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import strava, activities,kpi, graphs
+from routers import plot, strava, activities,kpi
 
 app = FastAPI(title="EyeSight Backend")
 
@@ -7,7 +7,7 @@ app = FastAPI(title="EyeSight Backend")
 app.include_router(strava.router, prefix="/strava", tags=["Strava"])
 app.include_router(activities.router, prefix="/activities", tags=["Activités"])
 app.include_router(kpi.router, prefix="/kpi", tags=["KPIs"])
-app.include_router(graphs.router, prefix="/graphs", tags=["Graphiques"])
+app.include_router(plot.router, prefix="/plot", tags=["Graphiques"])
 
 
 @app.get("/")
