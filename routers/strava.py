@@ -23,11 +23,13 @@ def fetch_activities(after_date: Optional[str] = None):
     # Fetch des activités
     df = strava_service.fetch_activities(after_date=dt)
 
+    df_cleaned = db_service.clean_data(df)
+
     # Stockage dans la base PostgreSQL
-    db_service.store_df_in_postgresql(df)
+    db_service.store_df_in_postgresql(df_cleaned)
 
     # Retour JSON pour le frontend
-    return {"nb_activities": len(df), "activities": df.to_dict(orient="records")}
+    return {"nb_activities": len(df_cleaned), "activities": df_cleaned.to_dict(orient="records")}
 
 @router.post("/fetch_streams")
 def fetch_streams(max_per_15min: int = 590):

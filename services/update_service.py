@@ -1,10 +1,9 @@
-# services/update_service.py
 from strava.fetch_strava import fetch_strava_data, get_strava_header, fetch_multiple_streams_df
 from strava.clean_data import clean_data
 from strava.store_data import store_df_in_postgresql, store_df_streams_in_postgresql
 from strava.params import *
-from sqlalchemy import create_engine, text
-from services.db_service import get_engine
+from sqlalchemy import text
+from db.connection import get_engine
 
 
 def get_last_activity_date():

@@ -1,6 +1,7 @@
 import pandas as pd
 from services.activity_service import get_all_activities
 
+
 SPORT_MAPPING = {
     "TrailRun": "Trail",
     "Run": "Run",
@@ -66,28 +67,4 @@ def prepare_kpis(start_date=None, end_date=None):
         "total_dplus_run_trail": round(total_dplus_run_trail, 2),
         "total_dplus_bike": round(total_dplus_bike, 2)
 
-    }
-
-
-def get_last_activity(sport_type=None):
-    df = get_all_activities()
-    if df.empty:
-        return None
-
-    if sport_type:
-        df = df[df["sport_type"] == sport_type]
-
-    if df.empty:
-        return None
-
-    dernier = df.sort_values(by="start_date", ascending=False).iloc[0]
-
-    return {
-        "type": dernier["sport_type"],
-        "distance_km": round(dernier["distance"] / 1000, 2),
-        "duree_hms": dernier.get("moving_time_hms"),
-        "allure_min_per_km": dernier.get("speed_minutes_per_km_hms"),
-        "vitesse_kmh": round(dernier.get("average_speed", 0), 2),
-        "denivele_m": round(dernier.get("total_elevation_gain", 0)),
-        "bpm_moyen": dernier.get("average_heartrate")
     }

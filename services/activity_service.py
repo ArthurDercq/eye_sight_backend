@@ -1,11 +1,49 @@
 import pandas as pd
-from sqlalchemy import create_engine
-from strava.params import DB_URI
-from services.db_service import get_all_activities
+import json
+import polyline
+from db.connection import get_conn
 
 
-engine = create_engine(DB_URI)
+def get_all_activities():
+    """Récupère toutes les activités dans un DataFrame."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM activites ORDER BY start_date DESC;")
+            rows = cur.fetchall()
+            colnames = [desc[0] for desc in cur.description]
 
+    return pd.DataFrame(rows, columns=colnames)
+
+def get_last_activity(sport_type=None):
+    df = get_all_activities()
+    if df.empty:
+        return None
+
+    if sport_type:
+        df = df[df["sport_type"] == sport_type]
+
+    if df.empty:
+        return None
+
+    #dernier_serie = df.sort_values(by="start_date", ascending=False).iloc[0]
+    dernier = df.sort_values(by="start_date", ascending=False).iloc[0] #c'est une serie car une seule paire de corchets
+
+    # Extraire la polyline
+    map_json = json.loads(dernier.get("map", "{}"))
+    polyline_str = map_json.get("summary_polyline")
+    coords = polyline.decode(polyline_str) if polyline_str else []
+
+    return {
+    "type": dernier.get("sport_type"),
+    "distance_km": round(dernier.get("distance", 0), 2),
+    "duree_minutes": dernier.get("moving_time"),
+    "duree_hms": dernier.get("moving_time_hms"),
+    "allure_min_per_km": dernier.get("speed_minutes_per_km_hms"),
+    "vitesse_kmh": round(dernier.get("average_speed", 0), 2),
+    "denivele_m": round(dernier.get("total_elevation_gain", 0)),
+    "bpm_moyen": dernier.get("average_heartrate"),
+    "polyline_coords": coords
+}
 
 def filter_activities(df: pd.DataFrame, sport_type: str = None, date_start: str = None) -> pd.DataFrame:
     """Applique les filtres usuels (sport + dates)."""
@@ -86,7 +124,6 @@ def minutes_to_hms(minutes):
     m = (total_seconds % 3600) // 60
     s = total_seconds % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
-
 
 
 SPORT_MAPPING = {

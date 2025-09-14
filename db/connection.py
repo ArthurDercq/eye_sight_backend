@@ -1,4 +1,3 @@
-# db/connection.py
 import os
 from contextlib import contextmanager
 from dotenv import load_dotenv
@@ -12,8 +11,8 @@ load_dotenv()
 DATABASE = os.getenv("DATABASE")
 USER = os.getenv("USER")
 PASSWORD = os.getenv("PASSWORD")
-HOST = os.getenv("HOST", "localhost")
-PORT = int(os.getenv("PORT", 5432))
+HOST = os.getenv("HOST")
+PORT = int(os.getenv("PORT"))
 
 
 @contextmanager
@@ -34,3 +33,11 @@ def get_conn():
         yield conn
     finally:
         conn.close()
+
+
+def get_engine():
+    """
+    Retourne un moteur SQLAlchemy pour pandas.read_sql ou df.to_sql.
+    """
+    uri = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
+    return create_engine(uri)

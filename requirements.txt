@@ -12,3 +12,5 @@ folium
 contextily
 geopandas
 shapely
+json
+polyline
