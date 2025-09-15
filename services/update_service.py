@@ -1,6 +1,6 @@
 from strava.fetch_strava import fetch_strava_data, get_strava_header, fetch_multiple_streams_df
 from strava.clean_data import clean_data
-from strava.store_data import store_df_in_postgresql, store_df_streams_in_postgresql
+from strava.store_data import store_df_in_postgresql, store_df_streams_in_postgresql_test
 from strava.params import *
 from sqlalchemy import text
 from db.connection import get_engine
@@ -67,7 +67,7 @@ def update_streams_database():
     if streams_df.empty:
         return "Aucun stream récupéré"
 
-    store_df_streams_in_postgresql(
+    store_df_streams_in_postgresql_test(
         streams_df,
         host=HOST,
         database=DATABASE,

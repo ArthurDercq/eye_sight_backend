@@ -3,7 +3,7 @@ import json
 import polyline
 from db.connection import get_conn
 import numpy as np
-import datetime
+from datetime import timedelta, datetime
 
 def get_all_activities():
     """Récupère toutes les activités dans un DataFrame et rend les données JSON-compliant."""
@@ -75,7 +75,7 @@ def get_recent_activities(weeks: int = 12, sport_types=None):
                 WHERE start_date >= %s
                 ORDER BY start_date DESC;
             """
-            start_date = (datetime.datetime.now() - pd.Timedelta(weeks=weeks*7, unit="D")).isoformat()
+            start_date = (datetime.now() - pd.Timedelta(weeks=weeks*7, unit="D")).isoformat()
             cur.execute(query, (start_date,))
             rows = cur.fetchall()
             colnames = [desc[0] for desc in cur.description]
@@ -98,7 +98,9 @@ def get_recent_activities(weeks: int = 12, sport_types=None):
 
 def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
     """
-    Agrège les données par semaine en additionnant la colonne `value_col`.
+    Agrège les données par semaine :
+    - somme pour les colonnes cumulatives
+    - moyenne pondérée par moving_time pour les colonnes moyennes
     """
     if df.empty:
         return pd.DataFrame(columns=["period", value_col])
@@ -106,28 +108,50 @@ def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
     df = df.copy()
     df["start_date"] = pd.to_datetime(df["start_date"])
 
-    # garder seulement les colonnes numériques utiles
-    numeric_cols = [value_col]
+    # Colonnes à sommer
+    sum_cols = [value_col]
     if "distance" in df.columns:
-        numeric_cols.append("distance")
+        sum_cols.append("distance")
     if "total_elevation_gain" in df.columns:
-        numeric_cols.append("total_elevation_gain")
-    if "average_speed" in df.columns:
-        numeric_cols.append("average_speed")
+        sum_cols.append("total_elevation_gain")
 
-    df_numeric = df[["start_date"] + numeric_cols]
+    # Colonnes à moyenner (pondérées par moving_time)
+    mean_cols = []
+    if "average_speed" in df.columns:
+        mean_cols.append("average_speed")
+    if "speed_minutes_per_km" in df.columns:
+        mean_cols.append("speed_minutes_per_km")
+    if "average_hearthrate" in df.columns:
+        mean_cols.append("average_hearthrate")
 
     # Grouper par semaine
-    weekly = df_numeric.groupby(pd.Grouper(key="start_date", freq="W-MON", label="left"))[numeric_cols].sum().reset_index()
+    grouped = df.groupby(pd.Grouper(key="start_date", freq="W-MON", label="left"))
 
-    # Renommer start_date -> period pour plus de clarté
-    weekly = weekly.rename(columns={"start_date": "period"})
+    # Agrégation des colonnes sommables
+    weekly_sum = grouped[sum_cols].sum() if sum_cols else pd.DataFrame()
+
+    # Agrégation pondérée des colonnes moyennes
+    weighted_means = {}
+    for col in mean_cols:
+        def safe_weighted_mean(g):
+            total_time = g["moving_time"].sum()
+            if total_time == 0:
+                return None
+            return (g[col] * g["moving_time"]).sum() / total_time
+
+        weighted_means[col] = grouped.apply(safe_weighted_mean)
+
+    # Combiner résultats
+    weekly = weekly_sum.copy()
+    for col, series in weighted_means.items():
+        weekly[col] = series
+
+    weekly = weekly.reset_index().rename(columns={"start_date": "period"})
 
     # Rendre JSON-safe
     weekly = weekly.replace({np.nan: None})
 
     return weekly
-
 
 def minutes_to_hms(minutes):
     """Convertit des minutes en format HH:MM:SS."""
@@ -138,9 +162,67 @@ def minutes_to_hms(minutes):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-SPORT_MAPPING = {
-    "TrailRun": "Trail",
-    "Run": "Run",
-    "Ride": "Bike",
-    "Swim": "Swim"
-}
+def get_weekly_daily_barchart(df: pd.DataFrame, week_offset: int = 0):
+    """
+    Prépare les données pour un bar chart empilé :
+    - x = jours de la semaine (Lundi..Dimanche)
+    - y = somme de moving_time
+    - couleur = sport_type
+    - week_offset: 0 = cette semaine, 1 = semaine dernière, etc.
+    """
+    if df.empty:
+        return {
+            "week": start_week.strftime("%d-%m-%Y"),
+            "labels": ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"],
+            "datasets": [],
+            "message": "Aucune activité"
+        }
+
+    df = df.copy()
+    df["start_date"] = pd.to_datetime(df["start_date"])
+
+    # Calcul des bornes de la semaine demandée
+    today = datetime.now()
+    # Trouver le lundi de cette semaine
+    this_monday = today - timedelta(days=today.weekday())
+    # Appliquer le décalage de semaines
+    start_week = this_monday - timedelta(weeks=week_offset)
+    end_week = start_week + timedelta(days=7)
+
+    # Filtrer les activités dans cette semaine
+    mask = (df["start_date"] >= start_week) & (df["start_date"] < end_week)
+    df_week = df.loc[mask]
+
+    jours = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+
+    if df_week.empty:
+        return {
+            "week": start_week.strftime("%d-%m-%Y"),
+            "labels": jours,
+            "datasets": [],
+            "message": "Aucune activité sur cette semaine"
+        }
+
+    # Ajouter jour de la semaine
+    df_week["weekday"] = df_week["start_date"].dt.weekday.apply(lambda i: jours[i])
+
+    # Grouper par jour et sport
+    grouped = df_week.groupby(["weekday", "sport_type"])["moving_time"].sum().reset_index()
+
+    # Pivot table : jour x sport
+    pivoted = grouped.pivot(index="weekday", columns="sport_type", values="moving_time").fillna(0)
+    pivoted = pivoted.reindex(jours, fill_value=0)  # forcer l’ordre
+
+    # Format JSON pour le frontend (chart empilé)
+    datasets = []
+    for sport in pivoted.columns:
+        datasets.append({
+            "label": sport,
+            "data": pivoted[sport].tolist()
+        })
+
+    return {
+        "week": start_week.strftime("%d-%m-%Y"),
+        "labels": pivoted.index.tolist(),
+        "datasets": datasets
+    }

@@ -16,3 +16,6 @@ json
 polyline
 numpy
 datetime
+jose
+jwt
+bcrypt

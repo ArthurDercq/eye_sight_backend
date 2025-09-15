@@ -3,8 +3,7 @@ from services.activity_service import get_all_activities
 from fastapi import APIRouter, Query
 from typing import Optional, List
 from services.activity_service import *
-from services.plot_service import get_hours_bar_data, get_weekly_intensity_data, get_calendar_heatmap_data, get_repartition_run_data
-from datetime import datetime
+from services.plot_service import get_calendar_heatmap_data, get_repartition_run_data
 
 router = APIRouter()
 
@@ -48,15 +47,13 @@ def repartition_run(
 
 
 
-
-@router.get("/weekly_intensity")
-def weekly_intensity(week_start: str, week_end: str):
-    df = get_all_activities()
-    start = datetime.fromisoformat(week_start)
-    end = datetime.fromisoformat(week_end)
-    return get_weekly_intensity_data(df, start, end)
-
 @router.get("/calendar_heatmap")
 def calendar_heatmap(value_col: str = "distance"):
     df = get_all_activities()
     return get_calendar_heatmap_data(df, value_col=value_col)
+
+
+@router.get("/daily_hours_bar")
+def daily_hours_bar(week_offset: int = Query(0, ge=0, le=52)):
+    df = get_recent_activities(weeks=1)
+    return get_weekly_daily_barchart(df, week_offset)

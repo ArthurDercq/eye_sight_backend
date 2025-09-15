@@ -20,12 +20,16 @@ def prepare_kpis(start_date=None, end_date=None):
     df = get_all_activities()
     if df.empty:
         return {
-            "total_km_run": 0,
-            "total_km_trail": 0,
-            "total_km_run_trail": 0,
-            "total_km_bike": 0,
-            "total_km_swim": 0,
-            "total_hours": 0
+            "total_km_run": None,
+            "total_km_trail": None,
+            "total_km_run_trail": None,
+            "total_km_bike": None,
+            "total_km_swim": None,
+            "total_hours": None,
+            "total_dplus_run": None,
+            "total_dplus_trail": None,
+            "total_dplus_run_trail": None,
+            "total_dplus_bike": None
         }
 
     # Normaliser les dates et sports

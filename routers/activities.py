@@ -3,14 +3,14 @@ from fastapi import APIRouter, Query
 from typing import Optional, List
 import pandas as pd
 from services.activity_service import *
-from services.plot_service import get_hours_bar_data, get_weekly_intensity_data, get_calendar_heatmap_data, get_repartition_run_data
+from services.plot_service import get_calendar_heatmap_data, get_repartition_run_data
 from datetime import datetime, timedelta
 
 router = APIRouter()
 
 
-@router.get("/")
-def list_activities(
+@router.get("/filter_activities")
+def filter_activities(
     sport_type: Optional[str] = Query(None, description="Filtrer par type de sport"),
     start_date: Optional[str] = Query(None, description="Filtrer les activités après cette date YYYY-MM-DD")
 ):
