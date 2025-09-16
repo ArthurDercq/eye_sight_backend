@@ -1,5 +1,3 @@
-# services/strava_service.py
-import time
 from strava import fetch_strava
 
 def get_header():

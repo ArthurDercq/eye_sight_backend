@@ -3,7 +3,7 @@ from services.activity_service import get_all_activities
 from fastapi import APIRouter, Query
 from typing import Optional, List
 from services.activity_service import *
-from services.plot_service import get_calendar_heatmap_data, get_repartition_run_data
+from services.plot_service import *
 
 router = APIRouter()
 
@@ -57,3 +57,15 @@ def calendar_heatmap(value_col: str = "distance"):
 def daily_hours_bar(week_offset: int = Query(0, ge=0, le=52)):
     df = get_recent_activities(weeks=1)
     return get_weekly_daily_barchart(df, week_offset)
+
+
+@router.get("/poster_dplus")
+def poster_dplus(
+    n: int = Query(40, description="Nombre d'activités à récupérer"),
+    sport_type: List[str] = Query(None, description="Types de sport à filtrer, ex: Trail,Run")
+):
+    data = get_poster_elev_profile(n=n, sport_type=sport_type)
+    if not data:
+        return {"message": "Aucune donnée de streams trouvée."}
+
+    return {"poster_dplus": data}

@@ -59,6 +59,9 @@ def prepare_kpis(start_date=None, end_date=None):
     # Total heures de sport (elapsed_time en secondes → heures)
     total_hours = df["elapsed_time"].sum() / 60 if "elapsed_time" in df.columns else 0
 
+    #Nombre d'activités par type de sport
+    activity_counts = df["sport_type"].value_counts().to_dict()
+
     return {
         "total_km_run": round(total_km_run, 2),
         "total_km_trail": round(total_km_trail, 2),
@@ -69,6 +72,6 @@ def prepare_kpis(start_date=None, end_date=None):
         "total_dplus_run": round(total_dplus_run, 2),
         "total_dplus_trail": round(total_dplus_trail, 2),
         "total_dplus_run_trail": round(total_dplus_run_trail, 2),
-        "total_dplus_bike": round(total_dplus_bike, 2)
-
+        "total_dplus_bike": round(total_dplus_bike, 2),
+        "nombre d'activités par sport": activity_counts
     }

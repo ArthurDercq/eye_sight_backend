@@ -41,6 +41,18 @@ def all_activities():
     return df.to_dict(orient="records")
 
 
+@router.get("/activity_streams")
+def activity_streams(activity_id: str = Query(..., description="ID de l'activité Strava")):
+    streams = get_streams_for_activity(activity_id)
+    if not streams:
+        return {"message": f"Aucune donnée de streams trouvée pour l'activité ID {activity_id}."}
+
+    # Extraire les coordonnées pour le polyligne
+    coords = [(point['lat'], point['lon']) for point in streams if point['lat'] is not None and point['lon'] is not None]
+
+    return {
+        "streams": streams
+    }
 
 
 

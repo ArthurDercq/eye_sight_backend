@@ -1,4 +1,4 @@
-.env
-strava/params.py
+/.env
+/strava/params.py
 /tests
 generate_pwd.py

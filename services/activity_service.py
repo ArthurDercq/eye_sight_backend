@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 import polyline
-from db.connection import get_conn
+from db.connection import *
 import numpy as np
 from datetime import timedelta, datetime
 
@@ -52,6 +52,9 @@ def get_last_activity(sport_type=None):
     coords = polyline.decode(polyline_str) if polyline_str else []
 
     return {
+    "id": dernier.get("id"),
+    "name": dernier.get("name"),
+    "date": dernier.get("start_date"),
     "type": dernier.get("sport_type"),
     "distance_km": round(dernier.get("distance", 0), 2),
     "duree_minutes": dernier.get("moving_time"),
@@ -62,6 +65,66 @@ def get_last_activity(sport_type=None):
     "bpm_moyen": dernier.get("average_heartrate"),
     "polyline_coords": coords
 }
+
+def get_last_activities(n=40, sport_type: list[str] = None):
+    df = get_all_activities()
+    if df.empty:
+        return []
+
+    if sport_type:
+        df = df[df["sport_type"].isin(sport_type)]
+
+    if df.empty:
+        return []
+
+    df_sorted = df.sort_values(by="start_date", ascending=False).head(n)
+
+    activities = []
+    for _, row in df_sorted.iterrows():
+        map_json = json.loads(row.get("map", "{}"))
+        polyline_str = map_json.get("summary_polyline")
+        coords = polyline.decode(polyline_str) if polyline_str else []
+
+        activities.append({
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "date": row.get("start_date"),
+            "type": row.get("sport_type"),
+            "distance_km": round(row.get("distance", 0), 2),
+            "duree_minutes": row.get("moving_time"),
+            "duree_hms": row.get("moving_time_hms"),
+            "allure_min_per_km": row.get("speed_minutes_per_km_hms"),
+            "vitesse_kmh": round(row.get("average_speed", 0), 2),
+            "denivele_m": round(row.get("total_elevation_gain", 0)),
+            "bpm_moyen": row.get("average_heartrate"),
+            "polyline_coords": coords
+        })
+
+    return activities
+
+def get_streams_for_activity(activity_id):
+    """
+    Récupère les données de streams (altitude, distance, etc.) pour une activité donnée.
+    Utilise ton get_engine() pour accéder à la BDD.
+    """
+
+    # s'assurer que c'est une string
+    activity_id = str(activity_id)
+
+    engine = get_engine()
+    query = """
+        SELECT distance_m, altitude, time_s, lat, lon
+        FROM streams
+        WHERE activity_id = %s
+        ORDER BY time_s
+    """
+    df = pd.read_sql(query, engine, params=(activity_id,))
+
+    if df.empty:
+        return []
+
+    # Conversion en JSON-ready (liste de points)
+    return df.to_dict(orient="records")
 
 def get_recent_activities(weeks: int = 12, sport_types=None):
     """
@@ -160,7 +223,6 @@ def minutes_to_hms(minutes):
     m = (total_seconds % 3600) // 60
     s = total_seconds % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
-
 
 def get_weekly_daily_barchart(df: pd.DataFrame, week_offset: int = 0):
     """

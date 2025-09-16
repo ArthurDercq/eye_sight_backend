@@ -1,5 +1,6 @@
-from services.activity_service import minutes_to_hms
+from services.activity_service import *
 import pandas as pd
+from typing import List
 
 
 def get_calendar_heatmap_data(df, value_col="distance"):
@@ -75,3 +76,31 @@ def get_repartition_run_data(df_filtered, sport_type):
         "values": df_count.values.tolist(),
         "sport_type": sport_type
     }
+
+
+def get_poster_elev_profile(n=40, sport_type: List[str] = None):
+    activities = get_last_activities(n=n, sport_type=sport_type)
+    poster_data = []
+
+    for act in activities:
+        activity_id = act["id"]
+        streams = get_streams_for_activity(activity_id)
+        if not streams:
+            continue
+
+        streams_simple = [
+            {"distance_m": p["distance_m"], "altitude": p["altitude"], "time_s": p["time_s"]}
+            for p in streams
+        ]
+
+        poster_data.append({
+            "activity_id": activity_id,
+            "type": act["type"],
+            "distance_km": act["distance_km"],
+            "duree_minutes": act["duree_minutes"],
+            "allure_min_per_km": act["allure_min_per_km"],
+            "denivele_m": act["denivele_m"],
+            "stream_points": streams_simple
+        })
+
+    return poster_data
