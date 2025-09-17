@@ -2,12 +2,20 @@ from routers import plot, strava, activities,kpi
 from fastapi import FastAPI, Depends, HTTPException, status
 from services.auth import authenticate_user, create_access_token, get_current_user, validate_environment
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 
-# ✅ Validation au démarrage - AVANT la création de l'app
+
+# Validation au démarrage - AVANT la création de l'app
 validate_environment()
 
 app = FastAPI(title="EyeSight Backend")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # ton front Vite
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # inclure les routers
 app.include_router(strava.router, prefix="/strava", tags=["Strava"]) #dependencies=[Depends(get_current_user)]
 app.include_router(activities.router, prefix="/activities", tags=["Activités"]) #dependencies=[Depends(get_current_user)]

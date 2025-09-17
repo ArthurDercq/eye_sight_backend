@@ -45,6 +45,9 @@ def get_last_activity(sport_type=None):
 
     #dernier_serie = df.sort_values(by="start_date", ascending=False).iloc[0]
     dernier = df.sort_values(by="start_date", ascending=False).iloc[0] #c'est une serie car une seule paire de crochets
+    # Convertir tous les types numpy.* en types Python natifs
+    dernier = dernier.apply(
+    lambda x: x.item() if isinstance(x, (np.generic,)) else x)
 
     # Extraire la polyline
     map_json = json.loads(dernier.get("map", "{}"))
@@ -65,6 +68,31 @@ def get_last_activity(sport_type=None):
     "bpm_moyen": dernier.get("average_heartrate"),
     "polyline_coords": coords
 }
+
+def get_last_activity_streams(sport_type=None):
+    """
+    Récupère les streams de la dernière activité (optionnellement filtrée par sport_type),
+    en utilisant get_last_activity() pour récupérer son ID.
+    """
+    last = get_last_activity(sport_type)
+    if not last:
+        return {"message": "Aucune activité trouvée."}
+
+    activity_id = str(last["id"])
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM streams WHERE activity_id = %s ORDER BY time_s ASC;",
+                (activity_id,)
+            )
+            streams = cur.fetchall()  # Liste de dicts grâce à RealDictCursor
+
+    return {
+        "activity_id": activity_id,
+        "streams": streams or []  # Liste vide si aucun stream
+    }
+
 
 def get_last_activities(n=40, sport_type: list[str] = None):
     df = get_all_activities()

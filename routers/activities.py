@@ -3,7 +3,6 @@ from fastapi import APIRouter, Query
 from typing import Optional, List
 import pandas as pd
 from services.activity_service import *
-from services.plot_service import get_calendar_heatmap_data, get_repartition_run_data
 from datetime import datetime, timedelta
 
 router = APIRouter()
@@ -39,6 +38,11 @@ def last_activity(sport_type: Optional[str] = Query(None)):
 def all_activities():
     df = get_all_activities()
     return df.to_dict(orient="records")
+
+@router.get("/last_activity_streams")
+def last_activity_streams(sport_type: Optional[str] = Query(None)):
+    return get_last_activity_streams(sport_type)
+
 
 
 @router.get("/activity_streams")

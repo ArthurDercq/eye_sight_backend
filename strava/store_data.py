@@ -257,6 +257,9 @@ def store_df_streams_in_postgresql_test(
                 df = df_streams.copy()
                 df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
 
+                df['activity_id'] = df['activity_id'].apply(lambda x: str(int(float(x))) if x is not None else None)
+
+
                 # Préparer la liste de tuples, en convertissant chaque valeur
                 values = []
                 for _, row in df.iterrows():
