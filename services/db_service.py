@@ -123,60 +123,23 @@ def store_df_in_postgresql(df, host, database, user, password, port):
 
     print("Données importées dans PostgreSQL ✅")
 
-def store_df_streams_in_postgresql(df_streams, host, database, user, password, port, table_name="streams"):
+def store_df_streams_in_postgresql(df_streams, host=None, database=None, user=None, password=None, port=None, table_name="streams"):
     """
-    Stocke un DataFrame de streams Strava dans une table PostgreSQL.
+    Wrapper vers la fonction optimisée pour maintenir la compatibilité.
+    Utilise les paramètres par défaut si non fournis.
     """
-    conn = connect(
-        host=host,
-        database=database,
-        user=user,
-        password=password,
-        port=port
+    from strava.store_data import store_df_streams_in_postgresql_optimized
+    from strava.params import HOST, DATABASE, USER, PASSWORD, PORT
+
+    return store_df_streams_in_postgresql_optimized(
+        df_streams,
+        host=host or HOST,
+        database=database or DATABASE,
+        user=user or USER,
+        password=password or PASSWORD,
+        port=port or PORT,
+        table_name=table_name
     )
-    cur = conn.cursor()
-
-    # Création de la table si elle n'existe pas
-    create_table_query = sql.SQL("""
-    CREATE TABLE IF NOT EXISTS {} (
-        activity_id VARCHAR(50),
-        lat FLOAT,
-        lon FLOAT,
-        altitude FLOAT,
-        distance_m FLOAT,
-        time_s FLOAT
-    );
-    """).format(sql.Identifier(table_name))
-    cur.execute(create_table_query)
-
-    # Préparer les données à insérer
-    values = [
-        (
-            row['activity_id'],
-            row['lat'],
-            row['lon'],
-            row['altitude'],
-            row['distance_m'],
-            row['time_s']
-        )
-        for _, row in df_streams.iterrows()
-    ]
-
-    columns = ('activity_id', 'lat', 'lon', 'altitude', 'distance_m', 'time_s')
-
-    insert_query = sql.SQL("""
-        INSERT INTO {} ({})
-        VALUES %s
-        ON CONFLICT DO NOTHING
-    """).format(
-        sql.Identifier(table_name),
-        sql.SQL(', ').join(map(sql.Identifier, columns))
-    )
-
-    execute_values(cur, insert_query.as_string(conn), values)
-    conn.commit()
-    cur.close()
-    print("Streams importés dans PostgreSQL ✅")
 
 
 # Fonction pour nettoyer les données

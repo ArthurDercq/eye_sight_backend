@@ -1,6 +1,6 @@
 from strava.fetch_strava import fetch_strava_data, get_strava_header, fetch_multiple_streams_df
 from strava.clean_data import clean_data
-from strava.store_data import store_df_in_postgresql, store_df_streams_in_postgresql_test
+from strava.store_data import store_df_in_postgresql, store_df_streams_in_postgresql_optimized
 from strava.params import *
 from sqlalchemy import text
 from db.connection import get_engine
@@ -49,25 +49,50 @@ def update_activities_database():
     return f"{len(cleaned_data)} nouvelle(s) activité(s) ajoutée(s)"
 
 
-def update_streams_database():
+def get_activities_without_streams(limit=None, recent_first=True):
     """
-    Met à jour la table streams avec les nouvelles activités
-    """
-    new_data = update_strava()
-    if new_data is None:
-        return "Aucune nouvelle activité trouvée"
+    Récupère les IDs des activités qui n'ont pas encore de streams
 
-    activity_ids = new_data["id"].tolist()
+    Args:
+        limit: Nombre max d'activités à récupérer (None = toutes)
+        recent_first: Si True, récupère les plus récentes d'abord
+    """
+    engine = get_engine()
+    with engine.connect() as conn:
+        order_clause = "ORDER BY a.start_date DESC" if recent_first else ""
+        limit_clause = f"LIMIT {limit}" if limit else ""
+
+        query = f"""
+            SELECT a.id
+            FROM activites a
+            LEFT JOIN streams s ON a.id::text = s.activity_id
+            WHERE s.activity_id IS NULL
+            {order_clause}
+            {limit_clause}
+        """
+        result = conn.execute(text(query))
+        activity_ids = [row[0] for row in result.fetchall()]
+    return activity_ids
+
+
+def update_streams_database(batch_size=50):
+    """
+    Met à jour la table streams pour les activités qui n'ont pas encore de streams
+
+    Args:
+        batch_size: Nombre d'activités à traiter par batch (défaut: 50)
+    """
+    activity_ids = get_activities_without_streams(limit=batch_size, recent_first=True)
     if not activity_ids:
-        return "Aucun nouvel ID d'activité"
+        return "Toutes les activités ont déjà leurs streams"
 
     header = get_strava_header()
     streams_df = fetch_multiple_streams_df(activity_ids, header)
 
     if streams_df.empty:
-        return "Aucun stream récupéré"
+        return f"Aucun stream récupéré pour {len(activity_ids)} activité(s) (probablement des workouts sans GPS)"
 
-    store_df_streams_in_postgresql_test(
+    store_df_streams_in_postgresql_optimized(
         streams_df,
         host=HOST,
         database=DATABASE,
@@ -76,4 +101,38 @@ def update_streams_database():
         port=PORT
     )
 
-    return f"{len(streams_df)} stream(s) ajouté(s)"
+    # Vérifier s'il reste des activités à traiter
+    remaining = get_activities_without_streams(limit=1)
+    status_msg = f"{len(streams_df)} stream(s) ajouté(s) pour {len(activity_ids)} activité(s)"
+    if remaining:
+        status_msg += f" - {len(remaining)} activité(s) restante(s) sans streams"
+    else:
+        status_msg += " - Toutes les activités ont maintenant leurs streams ✅"
+
+    return status_msg
+
+
+def update_all_streams_database():
+    """
+    Met à jour TOUS les streams manquants (utiliser avec précaution)
+    """
+    activity_ids = get_activities_without_streams()
+    if not activity_ids:
+        return "Toutes les activités ont déjà leurs streams"
+
+    header = get_strava_header()
+    streams_df = fetch_multiple_streams_df(activity_ids, header)
+
+    if streams_df.empty:
+        return f"Aucun stream récupéré pour {len(activity_ids)} activité(s)"
+
+    store_df_streams_in_postgresql_optimized(
+        streams_df,
+        host=HOST,
+        database=DATABASE,
+        user=USER,
+        password=PASSWORD,
+        port=PORT
+    )
+
+    return f"{len(streams_df)} stream(s) ajouté(s) pour {len(activity_ids)} activité(s)"

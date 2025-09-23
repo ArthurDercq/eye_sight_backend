@@ -2,9 +2,7 @@
 import pandas as pd
 from psycopg2 import connect, sql
 from psycopg2.extras import execute_values
-import pandas as pd
 import json
-from datetime import datetime
 from strava.clean_data import *
 from strava.fetch_strava import *
 from strava.params import *
@@ -124,58 +122,12 @@ def store_df_in_postgresql(df, host, database, user, password, port):
 
 def store_df_streams_in_postgresql(df_streams, host, database, user, password, port, table_name="streams"):
     """
-    Stocke un DataFrame de streams Strava dans une table PostgreSQL.
+    DEPRECATED: Utilisez store_df_streams_in_postgresql_optimized à la place.
+    Fonction gardée pour compatibilité mais redirige vers la version optimisée.
     """
-    conn = connect(
-        host=host,
-        database=database,
-        user=user,
-        password=password,
-        port=port
+    return store_df_streams_in_postgresql_optimized(
+        df_streams, host, database, user, password, port, table_name
     )
-    cur = conn.cursor()
-
-    # Création de la table si elle n'existe pas
-    create_table_query = sql.SQL("""
-    CREATE TABLE IF NOT EXISTS {} (
-        activity_id VARCHAR(50),
-        lat FLOAT,
-        lon FLOAT,
-        altitude FLOAT,
-        distance_m FLOAT,
-        time_s FLOAT
-    );
-    """).format(sql.Identifier(table_name))
-    cur.execute(create_table_query)
-
-    # Préparer les données à insérer
-    values = [
-        (
-            row['activity_id'],
-            row['lat'],
-            row['lon'],
-            row['altitude'],
-            row['distance_m'],
-            row['time_s']
-        )
-        for _, row in df_streams.iterrows()
-    ]
-
-    columns = ('activity_id', 'lat', 'lon', 'altitude', 'distance_m', 'time_s')
-
-    insert_query = sql.SQL("""
-        INSERT INTO {} ({})
-        VALUES %s
-        ON CONFLICT DO NOTHING
-    """).format(
-        sql.Identifier(table_name),
-        sql.SQL(', ').join(map(sql.Identifier, columns))
-    )
-
-    execute_values(cur, insert_query.as_string(conn), values)
-    conn.commit()
-    cur.close()
-    print("Streams importés dans PostgreSQL ✅")
 
 
 
@@ -212,17 +164,30 @@ def _to_python_value(x):
     # fallback (already python native)
     return x
 
-def store_df_streams_in_postgresql_test(
+
+def _safe_convert_activity_id(x):
+    """Conversion sécurisée de activity_id en string."""
+    try:
+        if pd.isna(x) or x is None:
+            return None
+        return str(int(float(x)))
+    except (ValueError, TypeError, OverflowError):
+        return str(x) if x is not None else None
+
+def store_df_streams_in_postgresql_optimized(
     df_streams,
     host, database, user, password, port,
     table_name="streams",
     debug_preview: int = 0
 ):
     """
-    Stocke un DataFrame de streams Strava dans une table PostgreSQL.
-    Convertit les numpy types en types Python natifs pour éviter
-    erreurs comme 'schema "np" does not exist'.
+    Version optimisée pour stocker un DataFrame de streams Strava dans PostgreSQL.
+    Convertit les numpy types en types Python natifs et gère les conflits proprement.
     """
+    if df_streams.empty:
+        print("Aucune ligne à insérer dans les streams.")
+        return 0
+
     conn = connect(
         host=host,
         database=database,
@@ -234,61 +199,187 @@ def store_df_streams_in_postgresql_test(
     try:
         with conn:
             with conn.cursor() as cur:
-                # Création de la table si elle n'existe pas (ajuste les types si besoin)
-                create_table_query = sql.SQL("""
-                CREATE TABLE IF NOT EXISTS {table} (
-                    activity_id VARCHAR(50),
-                    lat DOUBLE PRECISION,
-                    lon DOUBLE PRECISION,
-                    altitude DOUBLE PRECISION,
-                    distance_m DOUBLE PRECISION,
-                    time_s DOUBLE PRECISION
-                );
-                """).format(table=sql.Identifier(table_name))
-                cur.execute(create_table_query)
+                # Vérifier si la table existe et sa structure
+                cur.execute("""
+                    SELECT column_name, data_type
+                    FROM information_schema.columns
+                    WHERE table_name = %s AND table_schema = 'public'
+                    ORDER BY ordinal_position;
+                """, (table_name,))
 
-                # Assure-toi d'avoir les colonnes attendues
+                existing_columns = cur.fetchall()
+                table_exists = len(existing_columns) > 0
+
+                if table_exists:
+                    print(f"Table {table_name} existe déjà avec {len(existing_columns)} colonnes")
+                    # Vérifier s'il y a une clé primaire
+                    cur.execute("""
+                        SELECT COUNT(*) FROM information_schema.table_constraints
+                        WHERE table_name = %s AND constraint_type = 'PRIMARY KEY'
+                    """, (table_name,))
+                    has_pk = cur.fetchone()[0] > 0
+
+                    if not has_pk:
+                        print(f"Ajout d'une clé primaire composite à la table {table_name}...")
+                        # Ajouter une clé primaire composite seulement si pas de doublons
+                        cur.execute(sql.SQL("""
+                            SELECT
+                                COUNT(*) as total,
+                                COUNT(DISTINCT (activity_id, time_s)) as distinct_pairs
+                            FROM {}
+                        """).format(sql.Identifier(table_name)))
+                        result = cur.fetchone()
+                        total, distinct = result[0], result[1]
+
+                        if total == distinct:
+                            try:
+                                cur.execute(sql.SQL("""
+                                    ALTER TABLE {}
+                                    ADD CONSTRAINT {}_pk
+                                    PRIMARY KEY (activity_id, time_s)
+                                """).format(
+                                    sql.Identifier(table_name),
+                                    sql.Identifier(table_name)
+                                ))
+                                print("Clé primaire ajoutée avec succès ✅")
+                            except Exception as e:
+                                print(f"Impossible d'ajouter la clé primaire: {e}")
+                        else:
+                            print(f"ATTENTION: {total - distinct} doublons détectés, nettoyage recommandé")
+                else:
+                    # Créer la table avec clé primaire
+                    create_table_query = sql.SQL("""
+                    CREATE TABLE {table} (
+                        activity_id VARCHAR(50) NOT NULL,
+                        lat DOUBLE PRECISION,
+                        lon DOUBLE PRECISION,
+                        altitude DOUBLE PRECISION,
+                        distance_m DOUBLE PRECISION,
+                        time_s DOUBLE PRECISION NOT NULL,
+                        PRIMARY KEY (activity_id, time_s)
+                    );
+                    """).format(table=sql.Identifier(table_name))
+                    cur.execute(create_table_query)
+                    print(f"Table {table_name} créée avec clé primaire ✅")
+
+                # Validation des colonnes
                 expected_cols = ['activity_id', 'lat', 'lon', 'altitude', 'distance_m', 'time_s']
                 missing = [c for c in expected_cols if c not in df_streams.columns]
                 if missing:
                     raise ValueError(f"Colonnes manquantes dans df_streams: {missing}")
 
-                # Remplacer NaN/inf par None
+                # Nettoyage et conversion des données
                 df = df_streams.copy()
                 df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
 
-                df['activity_id'] = df['activity_id'].apply(lambda x: str(int(float(x))) if x is not None else None)
+                # Conversion sécurisée de activity_id
+                df['activity_id'] = df['activity_id'].apply(_safe_convert_activity_id)
 
+                # Supprimer les lignes avec activity_id ou time_s manquants (requis pour PK)
+                initial_count = len(df)
+                df = df.dropna(subset=['activity_id', 'time_s'])
+                final_count = len(df)
 
-                # Préparer la liste de tuples, en convertissant chaque valeur
+                if initial_count != final_count:
+                    print(f"ATTENTION: {initial_count - final_count} lignes supprimées (activity_id ou time_s manquants)")
+
+                if df.empty:
+                    print("Aucune ligne valide à insérer après nettoyage.")
+                    return 0
+
+                # Préparer les données pour insertion
                 values = []
                 for _, row in df.iterrows():
                     tup = tuple(_to_python_value(row[col]) for col in expected_cols)
                     values.append(tup)
 
-                if debug_preview:
-                    print("Preview values (first rows):")
+                if debug_preview and values:
+                    print(f"Preview des {min(debug_preview, len(values))} premières lignes:")
                     for v in values[:debug_preview]:
                         print(v)
 
-                if not values:
-                    print("Aucune ligne à insérer.")
-                    return
+                # Insertion avec gestion des conflits - méthode robuste
+                # Vérifier si on a une clé primaire pour utiliser ON CONFLICT
+                cur.execute("""
+                    SELECT COUNT(*) FROM information_schema.table_constraints
+                    WHERE table_name = %s AND constraint_type = 'PRIMARY KEY'
+                """, (table_name,))
+                has_pk_now = cur.fetchone()[0] > 0
 
-                # Construire la requête d'insertion et exécuter avec execute_values
-                insert_query = sql.SQL("""
-                    INSERT INTO {table} ({cols})
-                    VALUES %s
-                    ON CONFLICT DO NOTHING
-                """).format(
-                    table=sql.Identifier(table_name),
-                    cols=sql.SQL(', ').join(map(sql.Identifier, expected_cols))
-                )
+                if has_pk_now:
+                    # Avec clé primaire, utilisation normale d'ON CONFLICT
+                    insert_query = sql.SQL("""
+                        INSERT INTO {table} ({cols})
+                        VALUES %s
+                        ON CONFLICT (activity_id, time_s) DO NOTHING
+                    """).format(
+                        table=sql.Identifier(table_name),
+                        cols=sql.SQL(', ').join(map(sql.Identifier, expected_cols))
+                    )
+                    execute_values(cur, insert_query.as_string(conn), values, template=None, page_size=1000)
+                else:
+                    # Sans clé primaire, insertion par lots avec vérification
+                    print("⚠️  Pas de clé primaire, insertion sécurisée par lots")
+                    inserted_count = 0
 
-                # IMPORTANT: passer la query en string (as_string) ou en SQL, execute_values supporte les deux
-                execute_values(cur, insert_query.as_string(conn), values, template=None, page_size=1000)
-                # commit via context manager (conn) -> auto commit
-                print(f"{len(values)} streams importés dans PostgreSQL ✅")
+                    for value_batch in [values[i:i+100] for i in range(0, len(values), 100)]:
+                        # Créer une table temporaire pour ce batch
+                        temp_table = f"{table_name}_temp_{id(value_batch) % 10000}"
 
+                        # Créer table temporaire
+                        cur.execute(sql.SQL("""
+                            CREATE TEMP TABLE {} AS
+                            SELECT * FROM {} WHERE FALSE
+                        """).format(
+                            sql.Identifier(temp_table),
+                            sql.Identifier(table_name)
+                        ))
+
+                        # Insérer dans la table temporaire
+                        temp_insert = sql.SQL("""
+                            INSERT INTO {} ({})
+                            VALUES %s
+                        """).format(
+                            sql.Identifier(temp_table),
+                            sql.SQL(', ').join(map(sql.Identifier, expected_cols))
+                        )
+                        execute_values(cur, temp_insert.as_string(conn), value_batch)
+
+                        # Insérer seulement les nouvelles données
+                        cur.execute(sql.SQL("""
+                            INSERT INTO {main_table} ({cols})
+                            SELECT {cols} FROM {temp_table} t
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM {main_table} m
+                                WHERE m.activity_id = t.activity_id
+                                AND m.time_s = t.time_s
+                            )
+                        """).format(
+                            main_table=sql.Identifier(table_name),
+                            temp_table=sql.Identifier(temp_table),
+                            cols=sql.SQL(', ').join(map(sql.Identifier, expected_cols))
+                        ))
+
+                        inserted_count += cur.rowcount
+
+                        # Supprimer la table temporaire
+                        cur.execute(sql.SQL("DROP TABLE {}").format(sql.Identifier(temp_table)))
+
+                    print(f"📊 {inserted_count} nouvelles lignes insérées (sur {len(values)} soumises)")
+
+                # Compter les nouvelles insertions
+                cur.execute(f"SELECT COUNT(*) FROM {table_name}")
+                total_after = cur.fetchone()[0]
+
+                print(f"✅ Insertion terminée. Total dans {table_name}: {total_after} lignes")
+                return len(values)
+
+    except Exception as e:
+        print(f"❌ Erreur lors du stockage des streams: {e}")
+        raise
     finally:
         conn.close()
+
+
+# Alias pour rétrocompatibilité
+store_df_streams_in_postgresql_test = store_df_streams_in_postgresql_optimized
