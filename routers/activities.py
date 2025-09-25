@@ -23,8 +23,9 @@ def filter_activities(
     if sport_type:
         df = df[df["sport_type"] == sport_type]
     if start_date:
-        df = df[df["start_date"] >= pd.to_datetime(start_date)]
-
+        start_date_dt = pd.to_datetime(start_date)
+        df["start_date"] = pd.to_datetime(df["start_date"])  # conversion en datetime
+        df = df[df["start_date"] >= start_date_dt]
     return {"activities": df.to_dict(orient="records")}
 
 @router.get("/last_activity")
