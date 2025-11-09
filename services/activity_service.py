@@ -166,7 +166,7 @@ def get_recent_activities(weeks: int = 12, sport_types=None):
                 WHERE start_date >= %s
                 ORDER BY start_date DESC;
             """
-            start_date = (datetime.now() - pd.Timedelta(weeks=weeks*7, unit="D")).isoformat()
+            start_date = (datetime.now() - pd.Timedelta(weeks=weeks)).isoformat()
             cur.execute(query, (start_date,))
             rows = cur.fetchall()
             colnames = [desc[0] for desc in cur.description]
@@ -199,12 +199,16 @@ def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
     df = df.copy()
     df["start_date"] = pd.to_datetime(df["start_date"])
 
-    # Colonnes à sommer
-    sum_cols = [value_col]
-    if "distance" in df.columns:
+    # Colonnes à sommer (toujours inclure distance, moving_time et dénivelé)
+    sum_cols = []
+    if "moving_time" in df.columns and "moving_time" not in sum_cols:
+        sum_cols.append("moving_time")
+    if "distance" in df.columns and "distance" not in sum_cols:
         sum_cols.append("distance")
-    if "total_elevation_gain" in df.columns:
+    if "total_elevation_gain" in df.columns and "total_elevation_gain" not in sum_cols:
         sum_cols.append("total_elevation_gain")
+    if value_col not in sum_cols:
+        sum_cols.append(value_col)
 
     # Colonnes à moyenner (pondérées par moving_time)
     mean_cols = []
@@ -238,6 +242,9 @@ def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
         weekly[col] = series
 
     weekly = weekly.reset_index().rename(columns={"start_date": "period"})
+
+    # Trier par période (du plus ancien au plus récent)
+    weekly = weekly.sort_values("period", ascending=True)
 
     # Rendre JSON-safe
     weekly = weekly.replace({np.nan: None})
