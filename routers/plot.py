@@ -55,7 +55,9 @@ def calendar_heatmap(value_col: str = "distance"):
 
 @router.get("/daily_hours_bar")
 def daily_hours_bar(week_offset: int = Query(0, ge=0, le=52)):
-    df = get_recent_activities(weeks=1)
+    # Récupérer suffisamment de semaines pour couvrir l'offset demandé
+    weeks_to_fetch = week_offset + 1
+    df = get_recent_activities(weeks=weeks_to_fetch)
     return get_weekly_daily_barchart(df, week_offset)
 
 
