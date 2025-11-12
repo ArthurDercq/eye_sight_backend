@@ -11,7 +11,8 @@ router = APIRouter()
 @router.get("/filter_activities")
 def filter_activities(
     sport_type: Optional[str] = Query(None, description="Filtrer par type de sport"),
-    start_date: Optional[str] = Query(None, description="Filtrer les activités après cette date YYYY-MM-DD")
+    start_date: Optional[str] = Query(None, description="Filtrer les activités après cette date YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="Filtrer les activités avant cette date YYYY-MM-DD")
 ):
     """
     Renvoie toutes les activités filtrées.
@@ -22,10 +23,20 @@ def filter_activities(
 
     if sport_type:
         df = df[df["sport_type"] == sport_type]
+
+    # Convertir start_date en datetime une seule fois
+    df["start_date"] = pd.to_datetime(df["start_date"])
+
     if start_date:
         start_date_dt = pd.to_datetime(start_date)
-        df["start_date"] = pd.to_datetime(df["start_date"])  # conversion en datetime
         df = df[df["start_date"] >= start_date_dt]
+
+    if end_date:
+        end_date_dt = pd.to_datetime(end_date)
+        # Ajouter 1 jour pour inclure toute la journée de end_date
+        end_date_dt = end_date_dt + pd.Timedelta(days=1)
+        df = df[df["start_date"] < end_date_dt]
+
     return {"activities": df.to_dict(orient="records")}
 
 @router.get("/last_activity")

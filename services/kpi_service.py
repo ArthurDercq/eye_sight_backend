@@ -42,7 +42,9 @@ def prepare_kpis(start_date=None, end_date=None):
         df = df[df["start_date"] >= start_date]
     if end_date:
         end_date = pd.to_datetime(end_date)
-        df = df[df["start_date"] <= end_date]
+        # Add 1 day to include all activities on end_date (up to 23:59:59)
+        end_date = end_date + pd.Timedelta(days=1)
+        df = df[df["start_date"] < end_date]
 
     # Calcul des KPIs
     total_km_run = df[df["sport_type"] == "Run"]["distance"].sum()
