@@ -199,6 +199,11 @@ def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
     df = df.copy()
     df["start_date"] = pd.to_datetime(df["start_date"])
 
+    # Calculer le lundi de la semaine pour chaque activité (lundi = 0)
+    # Cela garantit que chaque activité est attribuée à la bonne semaine
+    df["week_start"] = df["start_date"] - pd.to_timedelta(df["start_date"].dt.weekday, unit='D')
+    df["week_start"] = df["week_start"].dt.normalize()  # Retirer l'heure
+
     # Colonnes à sommer (toujours inclure distance, moving_time et dénivelé)
     sum_cols = []
     if "moving_time" in df.columns and "moving_time" not in sum_cols:
@@ -219,8 +224,8 @@ def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
     if "average_hearthrate" in df.columns:
         mean_cols.append("average_hearthrate")
 
-    # Grouper par semaine
-    grouped = df.groupby(pd.Grouper(key="start_date", freq="W-MON", label="left"))
+    # Grouper par semaine en utilisant le lundi calculé
+    grouped = df.groupby("week_start")
 
     # Agrégation des colonnes sommables
     weekly_sum = grouped[sum_cols].sum() if sum_cols else pd.DataFrame()
@@ -241,7 +246,7 @@ def aggregate_weekly(df: pd.DataFrame, value_col: str = "moving_time"):
     for col, series in weighted_means.items():
         weekly[col] = series
 
-    weekly = weekly.reset_index().rename(columns={"start_date": "period"})
+    weekly = weekly.reset_index().rename(columns={"week_start": "period"})
 
     # Trier par période (du plus ancien au plus récent)
     weekly = weekly.sort_values("period", ascending=True)
@@ -279,7 +284,7 @@ def get_weekly_daily_barchart(df: pd.DataFrame, week_offset: int = 0):
     df["start_date"] = pd.to_datetime(df["start_date"])
 
     # Calcul des bornes de la semaine demandée
-    today = datetime.now()
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     # Trouver le lundi de cette semaine
     this_monday = today - timedelta(days=today.weekday())
     # Appliquer le décalage de semaines

@@ -71,3 +71,27 @@ def poster_dplus(
         return {"message": "Aucune donnée de streams trouvée."}
 
     return {"poster_dplus": data}
+
+
+@router.get("/weekly_pace")
+def weekly_pace(
+    weeks: int = Query(12, ge=1, le=52),
+    sport_types: Optional[List[str]] = Query(None),
+    year: Optional[int] = Query(None)
+):
+    """
+    Retourne l'allure moyenne pondérée par semaine (en min/km).
+    L'allure est pondérée par la distance parcourue.
+    """
+    df = get_recent_activities(weeks=weeks)
+
+    # Filtrage par sport_type si fourni
+    if sport_types:
+        df = df[df["sport_type"].isin(sport_types)]
+
+    # Filtrage par année si fourni
+    if year:
+        df = df[df["start_date"].dt.year == year]
+
+    weekly_pace = get_weekly_pace_data(df)
+    return weekly_pace.to_dict(orient="records")

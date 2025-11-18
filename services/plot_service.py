@@ -104,3 +104,50 @@ def get_poster_elev_profile(n=40, sport_type: List[str] = None):
         })
 
     return poster_data
+
+
+def get_weekly_pace_data(df: pd.DataFrame):
+    """
+    Calcule l'allure moyenne pondérée par semaine.
+    L'allure est calculée en pondérant par la distance parcourue.
+
+    Formule : allure_moy = (temps_total / distance_totale)
+    où temps_total et distance_totale sont les sommes hebdomadaires.
+
+    Retourne l'allure en min/km.
+    """
+    if df.empty:
+        return pd.DataFrame(columns=["period", "pace_min_km"])
+
+    df = df.copy()
+    df["start_date"] = pd.to_datetime(df["start_date"])
+
+    # Calculer le lundi de la semaine pour chaque activité
+    df["week_start"] = df["start_date"] - pd.to_timedelta(df["start_date"].dt.weekday, unit='D')
+    df["week_start"] = df["week_start"].dt.normalize()
+
+    # Filtrer les activités avec distance > 0 pour éviter division par zéro
+    df_with_distance = df[df["distance"] > 0].copy()
+
+    if df_with_distance.empty:
+        return pd.DataFrame(columns=["period", "pace_min_km"])
+
+    # Grouper par semaine et sommer distance et temps
+    weekly_agg = df_with_distance.groupby("week_start").agg({
+        "distance": "sum",
+        "moving_time": "sum"
+    }).reset_index()
+
+    # Calculer l'allure moyenne pondérée : moving_time (minutes) / distance (km)
+    weekly_agg["pace_min_km"] = weekly_agg["moving_time"] / weekly_agg["distance"]
+
+    # Formater la période
+    weekly_agg["period"] = weekly_agg["week_start"].dt.strftime("%Y-%m-%d")
+
+    # Retourner seulement les colonnes nécessaires
+    result = weekly_agg[["period", "pace_min_km"]].copy()
+
+    # Remplacer les NaN par None pour JSON
+    result = result.where(pd.notnull(result), None)
+
+    return result
