@@ -71,6 +71,31 @@ def activity_streams(activity_id: str = Query(..., description="ID de l'activit�
     }
 
 
+@router.get("/activity_detail/{activity_id}")
+def activity_detail(activity_id: str):
+    """
+    Renvoie les détails complets d'une activité avec ses streams.
+    Inclut: info globale + streams (lat, lon, altitude, distance_m, time_s, heartrate, cadence, velocity_smooth, temp, power, grade_smooth)
+    """
+    # Récupérer les infos générales de l'activité
+    df = get_all_activities()
+    activity_info = df[df["id"] == int(activity_id)]
+
+    if activity_info.empty:
+        return {"error": f"Activité {activity_id} introuvable"}
+
+    # Convertir en dict
+    activity = activity_info.iloc[0].to_dict()
+
+    # Récupérer les streams
+    streams = get_streams_for_activity(activity_id)
+
+    return {
+        "activity": activity,
+        "streams": streams if streams else []
+    }
+
+
 
 @router.post("/update_db")
 def update_db():

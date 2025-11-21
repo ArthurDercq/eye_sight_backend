@@ -1,5 +1,6 @@
 import pandas as pd
 from services.activity_service import get_all_activities
+from datetime import datetime, timedelta
 
 
 SPORT_MAPPING = {
@@ -76,4 +77,88 @@ def prepare_kpis(start_date=None, end_date=None):
         "total_dplus_run_trail": round(total_dplus_run_trail, 2),
         "total_dplus_bike": round(total_dplus_bike, 2),
         "nombre d'activités par sport": activity_counts
+    }
+
+
+def calculate_streak():
+    """
+    Calcule la série d'activités hebdomadaires consécutives.
+    Conditions pour qu'une semaine compte:
+    - Au moins 1 activité
+    - Au moins 5 km courus (Run ou Trail)
+
+    Retourne:
+    - streak_weeks: nombre de semaines consécutives
+    - total_activities: nombre total d'activités dans la streak
+    """
+    df = get_all_activities()
+    if df.empty:
+        return {"streak_weeks": 0, "total_activities": 0}
+
+    # Normaliser les dates et sports
+    df["start_date"] = pd.to_datetime(df["start_date"])
+    df["sport_type"] = df["sport_type"].map(lambda s: SPORT_MAPPING.get(s, s))
+
+    # Trier par date décroissante (du plus récent au plus ancien)
+    df = df.sort_values("start_date", ascending=False)
+
+    # Calculer le numéro de semaine ISO (année, semaine)
+    df["year"] = df["start_date"].dt.isocalendar().year
+    df["week"] = df["start_date"].dt.isocalendar().week
+    df["year_week"] = df["year"].astype(str) + "-W" + df["week"].astype(str).str.zfill(2)
+
+    # Obtenir la semaine actuelle
+    now = datetime.now()
+    current_year = now.isocalendar().year
+    current_week = now.isocalendar().week
+    current_year_week = f"{current_year}-W{str(current_week).zfill(2)}"
+
+    # Grouper par semaine
+    weekly_groups = df.groupby("year_week").apply(
+        lambda group: {
+            "year": group["year"].iloc[0],
+            "week": group["week"].iloc[0],
+            "activity_count": len(group),
+            "run_trail_distance": group[group["sport_type"].isin(["Run", "Trail"])]["distance"].sum(),
+            "activities": group.index.tolist()
+        },
+        include_groups=False
+    ).to_dict()
+
+    # Générer la liste de toutes les semaines depuis la plus récente
+    streak_weeks = 0
+    total_activities = 0
+
+    # Commencer à partir de la semaine actuelle
+    check_year = current_year
+    check_week = current_week
+
+    while True:
+        year_week_key = f"{check_year}-W{str(check_week).zfill(2)}"
+
+        if year_week_key in weekly_groups:
+            week_data = weekly_groups[year_week_key]
+            # Vérifier les conditions: au moins 1 activité ET au moins 5 km Run/Trail
+            if week_data["activity_count"] >= 1 and week_data["run_trail_distance"] >= 5:
+                streak_weeks += 1
+                total_activities += week_data["activity_count"]
+            else:
+                # La semaine ne valide pas les conditions, on arrête la streak
+                break
+        else:
+            # Pas d'activité cette semaine, on arrête la streak
+            break
+
+        # Passer à la semaine précédente
+        check_week -= 1
+        if check_week < 1:
+            # Passer à l'année précédente
+            check_year -= 1
+            # Obtenir le nombre de semaines dans l'année précédente
+            last_day_of_year = datetime(check_year, 12, 31)
+            check_week = last_day_of_year.isocalendar().week
+
+    return {
+        "streak_weeks": streak_weeks,
+        "total_activities": total_activities
     }

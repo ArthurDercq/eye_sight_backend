@@ -133,7 +133,7 @@ def get_last_activities(n=40, sport_type: list[str] = None):
 def get_streams_for_activity(activity_id):
     """
     Récupère les données de streams (altitude, distance, etc.) pour une activité donnée.
-    Utilise ton get_engine() pour accéder à la BDD.
+    Inclut maintenant heartrate, cadence, velocity_smooth, temp, power, grade_smooth.
     """
 
     # s'assurer que c'est une string
@@ -141,7 +141,8 @@ def get_streams_for_activity(activity_id):
 
     engine = get_engine()
     query = """
-        SELECT distance_m, altitude, time_s, lat, lon
+        SELECT distance_m, altitude, time_s, lat, lon,
+               heartrate, cadence, velocity_smooth, temp, power, grade_smooth
         FROM streams
         WHERE activity_id = %s
         ORDER BY time_s

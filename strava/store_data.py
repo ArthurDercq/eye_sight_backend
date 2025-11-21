@@ -256,6 +256,12 @@ def store_df_streams_in_postgresql_optimized(
                         altitude DOUBLE PRECISION,
                         distance_m DOUBLE PRECISION,
                         time_s DOUBLE PRECISION NOT NULL,
+                        heartrate INTEGER,
+                        cadence INTEGER,
+                        velocity_smooth DOUBLE PRECISION,
+                        temp INTEGER,
+                        power INTEGER,
+                        grade_smooth DOUBLE PRECISION,
                         PRIMARY KEY (activity_id, time_s)
                     );
                     """).format(table=sql.Identifier(table_name))
@@ -263,13 +269,28 @@ def store_df_streams_in_postgresql_optimized(
                     print(f"Table {table_name} créée avec clé primaire ✅")
 
                 # Validation des colonnes
-                expected_cols = ['activity_id', 'lat', 'lon', 'altitude', 'distance_m', 'time_s']
-                missing = [c for c in expected_cols if c not in df_streams.columns]
-                if missing:
-                    raise ValueError(f"Colonnes manquantes dans df_streams: {missing}")
+                expected_cols = ['activity_id', 'lat', 'lon', 'altitude', 'distance_m', 'time_s',
+                                 'heartrate', 'cadence', 'velocity_smooth', 'temp', 'power', 'grade_smooth']
+
+                # Only check for required columns (activity_id and time_s must exist)
+                required_cols = ['activity_id', 'time_s']
+                missing_required = [c for c in required_cols if c not in df_streams.columns]
+                if missing_required:
+                    raise ValueError(f"Colonnes requises manquantes dans df_streams: {missing_required}")
+
+                # Add missing optional columns with None values
+                for col in expected_cols:
+                    if col not in df_streams.columns:
+                        print(f"[INFO] Colonne optionnelle '{col}' manquante, ajout avec valeurs NULL")
 
                 # Nettoyage et conversion des données
                 df = df_streams.copy()
+
+                # Add missing columns with None if they don't exist
+                for col in expected_cols:
+                    if col not in df.columns:
+                        df[col] = None
+
                 df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
 
                 # Conversion sécurisée de activity_id

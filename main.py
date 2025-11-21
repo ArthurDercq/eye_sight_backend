@@ -1,4 +1,4 @@
-from routers import plot, strava, activities,kpi
+from routers import plot, strava, activities, kpi, analysis
 from fastapi import FastAPI, Depends, HTTPException, status
 from services.auth import authenticate_user, create_access_token, get_current_user, validate_environment
 from fastapi.security import OAuth2PasswordRequestForm
@@ -21,6 +21,7 @@ app.include_router(strava.router, prefix="/strava", tags=["Strava"]) #dependenci
 app.include_router(activities.router, prefix="/activities", tags=["Activités"]) #dependencies=[Depends(get_current_user)]
 app.include_router(kpi.router, prefix="/kpi", tags=["KPIs"]) #dependencies=[Depends(get_current_user)]
 app.include_router(plot.router, prefix="/plot", tags=["Graphiques"]) #dependencies=[Depends(get_current_user)]
+app.include_router(analysis.router, prefix="/analysis", tags=["Analyses"]) #dependencies=[Depends(get_current_user)]
 
 
 @app.get("/")

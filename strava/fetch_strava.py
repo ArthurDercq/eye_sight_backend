@@ -87,10 +87,10 @@ def get_all_activity_ids_from_db(db_uri, table_name):
 
 def fetch_stream(activity_id, header):
 
-    #Récupère les streams (altitude, distance, latlng, time) d'une activité
+    #Récupère les streams (altitude, distance, latlng, time, heartrate, cadence, velocity_smooth, temp, power, grade_smooth) d'une activité
 
     url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
-    params = {"keys": "latlng,altitude,distance,time", "key_by_type": "true"}
+    params = {"keys": "latlng,altitude,distance,time,heartrate,cadence,velocity_smooth,temp,power,grade_smooth", "key_by_type": "true"}
     resp = requests.get(url, headers=header, params=params)
     resp.raise_for_status()
     streams = resp.json()
@@ -99,6 +99,12 @@ def fetch_stream(activity_id, header):
     altitude = streams.get("altitude", {}).get("data", [])
     distance = streams.get("distance", {}).get("data", [])
     time = streams.get("time", {}).get("data", [])
+    heartrate = streams.get("heartrate", {}).get("data", [])
+    cadence = streams.get("cadence", {}).get("data", [])
+    velocity_smooth = streams.get("velocity_smooth", {}).get("data", [])
+    temp = streams.get("temp", {}).get("data", [])
+    power = streams.get("power", {}).get("data", [])
+    grade_smooth = streams.get("grade_smooth", {}).get("data", [])
 
     # Construction DataFrame
     df_stream = pd.DataFrame({
@@ -107,7 +113,13 @@ def fetch_stream(activity_id, header):
         "lon": [pt[1] for pt in latlng] if latlng else None,
         "altitude": altitude,
         "distance_m": distance,
-        "time_s": time
+        "time_s": time,
+        "heartrate": heartrate if heartrate else None,
+        "cadence": cadence if cadence else None,
+        "velocity_smooth": velocity_smooth if velocity_smooth else None,
+        "temp": temp if temp else None,
+        "power": power if power else None,
+        "grade_smooth": grade_smooth if grade_smooth else None
     })
     print(f"Stream de l'activité {activity_id} récupéré ✅")
 
