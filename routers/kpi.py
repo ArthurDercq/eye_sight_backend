@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 from typing import Optional
 from services.kpi_service import prepare_kpis, calculate_streak
+from services.records_service import get_records_from_db, ensure_records_initialized
 
 router = APIRouter()
 
@@ -24,3 +25,28 @@ def get_streak():
     """
     streak_data = calculate_streak()
     return streak_data
+
+
+@router.get("/records")
+def get_records():
+    """
+    Retourne les records personnels de l'utilisateur depuis la base de données.
+
+    Les records sont calculés une seule fois à l'initialisation puis mis à jour
+    automatiquement quand une nouvelle activité bat un record.
+
+    Distances analysées:
+    - 5 km exact
+    - 10 km exact
+    - Semi-marathon (21.0975 km exact)
+    - 30 km exact
+    - Marathon (42.195 km exact)
+
+    Pour chaque distance, retourne le meilleur segment trouvé dans toutes les activités.
+    """
+    # Vérifier si les records sont initialisés, sinon les initialiser
+    ensure_records_initialized()
+
+    # Récupérer depuis la DB (ultra rapide)
+    records = get_records_from_db()
+    return {"records": records}

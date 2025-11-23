@@ -1,8 +1,16 @@
 from services import update_service
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException, status
 from typing import Optional, List
 import pandas as pd
 from services.activity_service import *
+from services.activity_crud import (
+    create_activity,
+    update_activity,
+    delete_activity,
+    get_activity_by_id,
+    activity_exists
+)
+from models.activity import ActivityCreate, ActivityUpdate, ActivityResponse
 from datetime import datetime, timedelta
 
 router = APIRouter()
@@ -112,3 +120,118 @@ def update_streams():
     """
     result = update_service.update_streams_database()
     return {"status": "ok", "message": result}
+
+
+# ============== CRUD Operations ==============
+
+@router.post("/activities", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
+def create_new_activity(activity: ActivityCreate):
+    """
+    Crée une nouvelle activité manuellement.
+
+    Les champs obligatoires sont:
+    - name: Nom de l'activité
+    - sport_type: Type de sport (Run, Ride, Trail, Bike, etc.)
+    - start_date: Date de début
+    - distance: Distance en km
+    - moving_time: Temps de mouvement en minutes
+
+    Les champs dérivés (speed, pace, etc.) sont calculés automatiquement.
+    """
+    try:
+        result = create_activity(activity)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la création de l'activité: {str(e)}"
+        )
+
+
+@router.get("/activities/{activity_id}", response_model=ActivityResponse)
+def get_activity(activity_id: int):
+    """
+    Récupère une activité par son ID.
+    """
+    activity = get_activity_by_id(activity_id)
+    if not activity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Activité {activity_id} introuvable"
+        )
+    return activity
+
+
+@router.put("/activities/{activity_id}", response_model=ActivityResponse)
+def update_existing_activity(activity_id: int, activity: ActivityUpdate):
+    """
+    Met à jour une activité existante (PATCH partiel).
+
+    Seuls les champs fournis seront mis à jour.
+    Les champs dérivés (speed, pace, etc.) sont recalculés si nécessaire.
+
+    **Important**: Cette modification peut impacter vos statistiques, KPIs et records.
+    """
+    # Vérifier que l'activité existe
+    if not activity_exists(activity_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Activité {activity_id} introuvable"
+        )
+
+    try:
+        result = update_activity(activity_id, activity)
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Échec de la mise à jour"
+            )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la mise à jour: {str(e)}"
+        )
+
+
+@router.patch("/activities/{activity_id}", response_model=ActivityResponse)
+def patch_activity(activity_id: int, activity: ActivityUpdate):
+    """
+    Alias pour PUT - Met à jour partiellement une activité.
+    """
+    return update_existing_activity(activity_id, activity)
+
+
+@router.delete("/activities/{activity_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_existing_activity(activity_id: int, delete_streams: bool = Query(True, description="Supprimer aussi les streams associés")):
+    """
+    Supprime une activité de la base de données.
+
+    Par défaut, supprime aussi les streams (traces GPS) associés.
+
+    **⚠️ ATTENTION**: Cette action est irréversible et impacte:
+    - Vos statistiques globales
+    - Vos KPIs
+    - Vos records personnels
+    - Les données de streams (traces GPS) si delete_streams=True
+    """
+    # Vérifier que l'activité existe
+    if not activity_exists(activity_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Activité {activity_id} introuvable"
+        )
+
+    try:
+        success = delete_activity(activity_id, delete_streams=delete_streams)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Échec de la suppression"
+            )
+        return None  # 204 No Content
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la suppression: {str(e)}"
+        )

@@ -31,7 +31,10 @@ def update_strava():
 def update_activities_database():
     """
     Met à jour la table activites avec les nouvelles activités Strava
+    et vérifie si les nouvelles activités battent des records personnels.
     """
+    from services.records_service import check_and_update_record_with_activity
+
     new_data = update_strava()
     if new_data is None:
         return "Aucune nouvelle activité trouvée"
@@ -46,7 +49,24 @@ def update_activities_database():
         port=PORT
     )
 
-    return f"{len(cleaned_data)} nouvelle(s) activité(s) ajoutée(s)"
+    # Vérifier si les nouvelles activités battent des records
+    total_broken_records = []
+    for _, activity in cleaned_data.iterrows():
+        activity_data = {
+            'sport_type': activity.get('sport_type'),
+            'distance': activity.get('distance'),
+            'moving_time': activity.get('moving_time'),
+            'name': activity.get('name'),
+            'start_date': activity.get('start_date')
+        }
+        broken_records = check_and_update_record_with_activity(activity['id'], activity_data)
+        total_broken_records.extend(broken_records)
+
+    message = f"{len(cleaned_data)} nouvelle(s) activité(s) ajoutée(s)"
+    if total_broken_records:
+        message += f" - 🎉 {len(total_broken_records)} record(s) battu(s) ! ({', '.join(total_broken_records)})"
+
+    return message
 
 
 def get_activities_without_streams(limit=None, recent_first=True):

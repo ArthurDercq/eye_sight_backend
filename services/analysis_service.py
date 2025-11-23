@@ -103,17 +103,17 @@ def calculate_rolling_hr_speed_correlation(activity_id: str, window_seconds: int
     else:
         df_sampled = df.copy()
 
-    # Convertir en format JSON-friendly
+    # Convertir en format JSON-friendly avec conversion explicite en types Python natifs
     result = {
-        "time": df_sampled['time_s'].tolist(),
-        "hr": df_sampled['hr_filtered'].tolist(),
-        "speed": df_sampled['speed_filtered'].tolist(),
-        "hr_normalized": df_sampled['hr_normalized'].tolist(),
-        "speed_normalized": df_sampled['speed_normalized'].tolist(),
-        "correlation_pearson": df_sampled['correlation_pearson'].tolist(),
-        "is_moving": df_sampled['is_moving'].tolist(),
-        "breakpoints": breakpoints,
-        "window_seconds": window_seconds,
+        "time": [float(x) if pd.notna(x) else None for x in df_sampled['time_s'].tolist()],
+        "hr": [float(x) if pd.notna(x) else None for x in df_sampled['hr_filtered'].tolist()],
+        "speed": [float(x) if pd.notna(x) else None for x in df_sampled['speed_filtered'].tolist()],
+        "hr_normalized": [float(x) if pd.notna(x) else None for x in df_sampled['hr_normalized'].tolist()],
+        "speed_normalized": [float(x) if pd.notna(x) else None for x in df_sampled['speed_normalized'].tolist()],
+        "correlation_pearson": [float(x) if pd.notna(x) else None for x in df_sampled['correlation_pearson'].tolist()],
+        "is_moving": [bool(x) if pd.notna(x) else False for x in df_sampled['is_moving'].tolist()],
+        "breakpoints": [float(x) for x in breakpoints if x is not None],
+        "window_seconds": int(window_seconds),
         "total_breakpoints": len([bp for bp in breakpoints if bp is not None])
     }
 

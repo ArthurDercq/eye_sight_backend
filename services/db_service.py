@@ -69,7 +69,12 @@ def store_df_in_postgresql(df, host, database, user, password, port):
         has_kudoed BOOLEAN,
         average_watts FLOAT,
         kilojoules FLOAT,
-        map JSONB
+        map JSONB,
+        device_watts BOOLEAN,
+        max_watts INTEGER,
+        weighted_average_watts INTEGER,
+        total_photo_count INTEGER,
+        suffer_score INTEGER
     );
     """).format(sql.Identifier(table_name))
 
@@ -86,7 +91,9 @@ def store_df_in_postgresql(df, host, database, user, password, port):
         str(row['start_latlng']), str(row['end_latlng']), row['max_speed'], row['average_cadence'],
         row['average_temp'], row['has_heartrate'], row['average_heartrate'], row['max_heartrate'],
         row['elev_high'], row['elev_low'], row['pr_count'], row['has_kudoed'],
-        row['average_watts'], row['kilojoules'], json.dumps(row['map'])
+        row['average_watts'], row['kilojoules'], json.dumps(row['map']),
+        row.get('device_watts'), row.get('max_watts'), row.get('weighted_average_watts'),
+        row.get('total_photo_count'), row.get('suffer_score')
         )
         for _, row in df.iterrows()
     ]
@@ -98,7 +105,8 @@ def store_df_in_postgresql(df, host, database, user, password, port):
         'total_elevation_gain', 'sport_type', 'start_date', 'start_date_local', 'timezone',
         'achievement_count', 'kudos_count', 'gear_id', 'start_latlng', 'end_latlng','max_speed',
         'average_cadence','average_temp', 'has_heartrate', 'average_heartrate', 'max_heartrate',
-        'elev_high', 'elev_low', 'pr_count', 'has_kudoed', 'average_watts','kilojoules', 'map'
+        'elev_high', 'elev_low', 'pr_count', 'has_kudoed', 'average_watts','kilojoules', 'map',
+        'device_watts', 'max_watts', 'weighted_average_watts', 'total_photo_count', 'suffer_score'
     )
 
     for col in columns:
@@ -174,9 +182,9 @@ def clean_data(df):
     'resource_state', 'athlete', 'type', 'workout_type', 'utc_offset',
     'location_city', 'location_state', 'location_country', 'comment_count',
     'athlete_count', 'photo_count', 'trainer', 'commute', 'manual',
-    'private', 'visibility', 'flagged', 'device_watts', 'heartrate_opt_out',
+    'private', 'visibility', 'flagged', 'heartrate_opt_out',
     'display_hide_heartrate_option', 'upload_id', 'upload_id_str', 'external_id',
-    'from_accepted_tag', 'total_photo_count'
+    'from_accepted_tag'
     ]
     # Suppression des colonnes non pertinentes du DataFrame
     activities_df_cleaned.drop(columns=columns_to_drop, errors='ignore', inplace=True)
@@ -222,7 +230,8 @@ def clean_data(df):
         'average_speed', 'speed_minutes_per_km','speed_minutes_per_km_hms', 'max_speed', 'average_cadence',
         'average_temp', 'has_heartrate', 'average_heartrate', 'max_heartrate',
         'elev_high', 'elev_low', 'pr_count', 'has_kudoed', 'average_watts',
-        'kilojoules', 'map'
+        'kilojoules', 'map', 'device_watts', 'max_watts', 'weighted_average_watts',
+        'total_photo_count', 'suffer_score'
 ]
 
 # Ajouter les colonnes manquantes avec None

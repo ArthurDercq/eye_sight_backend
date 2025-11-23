@@ -1,4 +1,27 @@
-/.env
+# Variables d'environnement (contiennent des secrets)
+.env
+.env.dev
+.env.prod
+.env.local
+.env*.local
+
+# Templates d'environnement (AUTORISÉS dans Git - pas de secrets)
+!.env*.example
+
+# Fichiers sensibles
 /strava/params.py
-/tests
 generate_pwd.py
+
+# Tests
+/tests
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
